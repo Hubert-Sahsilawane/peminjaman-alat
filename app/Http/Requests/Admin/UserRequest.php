@@ -14,17 +14,16 @@ class UserRequest extends FormRequest
 
     public function rules(): array
     {
+        $isUpdate = $this->isMethod('PUT') || $this->isMethod('PATCH');
         $userId = $this->route('user') ? $this->route('user') : null;
 
         return [
-            'name' => 'required|string|max:255',
-            'email' => [
-                'required',
-                'email',
-                Rule::unique('users', 'email')->ignore($userId)
-            ],
-            'password' => $this->isMethod('POST') ? 'required|min:6' : 'nullable|min:6',
-            'role' => 'required|in:admin,petugas,peminjam',
+            'name' => $isUpdate ? 'sometimes|string|max:255' : 'required|string|max:255',
+            'email' => $isUpdate
+                ? ['sometimes', 'email', Rule::unique('users', 'email')->ignore($userId)]
+                : ['required', 'email', Rule::unique('users', 'email')],
+            'password' => $isUpdate ? 'nullable|min:6' : 'required|min:6',
+            'role' => $isUpdate ? 'sometimes|in:admin,petugas,peminjam' : 'required|in:admin,petugas,peminjam',
         ];
     }
 
@@ -32,6 +31,8 @@ class UserRequest extends FormRequest
     {
         return [
             'name.required' => 'Nama wajib diisi',
+            'name.string' => 'Nama harus berupa teks',
+            'name.max' => 'Nama maksimal 255 karakter',
             'email.required' => 'Email wajib diisi',
             'email.email' => 'Format email tidak valid',
             'email.unique' => 'Email sudah terdaftar',

@@ -40,34 +40,29 @@ class ToolService
     }
 
     public function updateTool(Tool $tool, array $data, $gambarFile = null): Tool
-    {
-        // Handle upload gambar baru
-        if ($gambarFile) {
-            // Hapus gambar lama jika ada
-            if ($tool->gambar && Storage::disk('public')->exists($tool->gambar)) {
-                Storage::disk('public')->delete($tool->gambar);
-            }
-            $data['gambar'] = $gambarFile->store('tools', 'public');
+{
+    // Handle upload gambar baru
+    if ($gambarFile) {
+        // Hapus gambar lama jika ada
+        if ($tool->gambar && Storage::disk('public')->exists($tool->gambar)) {
+            Storage::disk('public')->delete($tool->gambar);
         }
-
-        // Hanya update field yang dikirim
-        $tool->fill($data);
-
-        // Cek apakah ada perubahan
-        if ($tool->isDirty()) {
-            $tool->save();
-
-            if (Auth::check()) {
-                ActivityLog::create([
-                    'user_id' => Auth::id(),
-                    'action' => 'Update Alat',
-                    'description' => "Memperbarui data alat: {$tool->nama_alat}"
-                ]);
-            }
-        }
-
-        return $tool->fresh();
+        $data['gambar'] = $gambarFile->store('tools', 'public');
     }
+
+    // Update model dengan data baru
+    $tool->update($data);  // ← LANGSUNG PAKAI UPDATE()
+
+    if (Auth::check()) {
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'Update Alat',
+            'description' => "Memperbarui data alat: {$tool->nama_alat}"
+        ]);
+    }
+
+    return $tool->fresh();
+}
 
     public function deleteTool(Tool $tool): bool
     {

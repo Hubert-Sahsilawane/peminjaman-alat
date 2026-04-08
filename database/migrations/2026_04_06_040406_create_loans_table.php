@@ -13,8 +13,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users');
             $table->foreignId('tool_id')->constrained('tools');
             $table->date('tanggal_pinjam');
-            $table->date('tanggal_kembali_rencana');
-            $table->date('tanggal_kembali_aktual')->nullable();
+            $table->date('tanggal_kembali');
             $table->enum('status', ['pending', 'disetujui', 'ditolak', 'kembali'])->default('pending');
             $table->foreignId('petugas_id')->nullable()->constrained('users');
             $table->timestamps();

@@ -9,26 +9,19 @@ class RoleSeeder extends Seeder
 {
     public function run()
     {
-        // Buat roles untuk guard api (sesuai dengan auth Anda)
-        $guards = ['api', 'web']; // Support kedua guard
-
-        foreach ($guards as $guard) {
-            Role::firstOrCreate(
-                ['name' => 'admin', 'guard_name' => $guard],
-                ['name' => 'admin', 'guard_name' => $guard]
-            );
-
-            Role::firstOrCreate(
-                ['name' => 'petugas', 'guard_name' => $guard],
-                ['name' => 'petugas', 'guard_name' => $guard]
-            );
-
-            Role::firstOrCreate(
-                ['name' => 'peminjam', 'guard_name' => $guard],
-                ['name' => 'peminjam', 'guard_name' => $guard]
-            );
+        // Cek dan buat role jika belum ada
+        if (!Role::where('name', 'admin')->exists()) {
+            Role::create(['name' => 'admin']);
         }
 
-        $this->command->info('Roles seeded successfully for api and web guards!');
+        if (!Role::where('name', 'petugas')->exists()) {
+            Role::create(['name' => 'petugas']);
+        }
+
+        if (!Role::where('name', 'peminjam')->exists()) {
+            Role::create(['name' => 'peminjam']);
+        }
+
+        $this->command->info('Roles seeded successfully!');
     }
 }

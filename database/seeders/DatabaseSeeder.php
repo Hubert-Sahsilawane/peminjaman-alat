@@ -57,5 +57,11 @@ class DatabaseSeeder extends Seeder
         if (!$peminjam->hasRole('peminjam')) {
             $peminjam->assignRole('peminjam');
         }
+
+        {
+        $this->call([
+            RoleSeeder::class,  // <-- Tambahkan ini
+        ]);
     }
+}
 }
