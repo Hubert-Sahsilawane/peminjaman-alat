@@ -16,9 +16,6 @@ class ToolController extends Controller
         $this->toolService = $toolService;
     }
 
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
         $tools = $this->toolService->getAllTools(10);
@@ -38,9 +35,6 @@ class ToolController extends Controller
         ], 200);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(ToolRequest $request)
     {
         $tool = $this->toolService->createTool(
@@ -55,9 +49,6 @@ class ToolController extends Controller
         ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
         $tool = $this->toolService->getToolById($id);
@@ -76,9 +67,6 @@ class ToolController extends Controller
         ], 200);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(ToolRequest $request, $id)
 {
     // Debug: lihat data yang masuk
@@ -105,9 +93,7 @@ class ToolController extends Controller
         'data' => new ToolResource($tool)
     ], 200);
 }
-    /**
-     * Remove the specified resource from storage.
-     */
+
     public function destroy($id)
     {
         $tool = $this->toolService->getToolById($id);
@@ -127,9 +113,6 @@ class ToolController extends Controller
         ], 200);
     }
 
-    /**
-     * Get all tools for select dropdown.
-     */
     public function select()
     {
         $tools = $this->toolService->getAllToolsForSelect();

@@ -4,38 +4,20 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * @property int $id
- * @property int $user_id
- * @property int $tool_id
- * @property string $tanggal_pinjam
- * @property string $tanggal_kembali_rencana
- * @property string|null $tanggal_kembali_aktual
- * @property string $status
- * @property int|null $petugas_id
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\User|null $petugas
- * @property-read \App\Models\Tool $tool
- * @property-read \App\Models\User $user
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan wherePetugasId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereStatus($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereTanggalKembaliAktual($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereTanggalKembaliRencana($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereTanggalPinjam($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereToolId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Loan whereUserId($value)
- * @mixin \Eloquent
- */
 class Loan extends Model
 {
     protected $guarded = [];
+
+    protected $casts = [
+        'tanggal_pinjam' => 'date',
+        'tanggal_kembali' => 'date',
+        'tanggal_kembali_aktual' => 'date',
+        'stok' => 'integer',
+        'harga_satuan' => 'integer',
+        'subtotal' => 'integer',
+        'denda' => 'integer',
+        'total_bayar' => 'integer',
+    ];
 
     public function user()
     {
@@ -50,5 +32,35 @@ class Loan extends Model
     public function petugas()
     {
         return $this->belongsTo(User::class, 'petugas_id');
+    }
+
+    // Generate invoice number
+    public static function generateInvoiceNumber()
+    {
+        $year = date('Y');
+        $month = date('m');
+        $lastInvoice = self::whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($lastInvoice && $lastInvoice->invoice_number) {
+            $lastNumber = intval(substr($lastInvoice->invoice_number, -4));
+            $newNumber = str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
+        } else {
+            $newNumber = '0001';
+        }
+
+        return 'INV/' . $year . $month . '/' . $newNumber;
+    }
+
+    // Hitung denda
+    public function calculateDenda()
+    {
+        if ($this->tanggal_kembali_aktual && $this->tanggal_kembali_aktual > $this->tanggal_kembali) {
+            $lateDays = $this->tanggal_kembali_aktual->diffInDays($this->tanggal_kembali);
+            return $lateDays * 5000; // Rp 5.000 per hari
+        }
+        return 0;
     }
 }

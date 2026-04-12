@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api\Peminjam;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Peminjam\PeminjamRequest;
+use App\Http\Requests\Peminjam\CartRequest;
+use App\Http\Requests\Peminjam\CheckoutRequest;
 use App\Http\Resources\Admin\ToolResource;
-use App\Http\Resources\Admin\LoanResource;
+use App\Http\Resources\Peminjam\CartResource;
+use App\Http\Resources\Peminjam\CheckoutResource;
 use App\Services\Peminjam\PeminjamService;
-use Illuminate\Support\Facades\Auth;  // <-- TAMBAHKAN INI
+use Illuminate\Support\Facades\Auth;
 
 class PeminjamController extends Controller
 {
@@ -18,10 +20,8 @@ class PeminjamController extends Controller
         $this->peminjamService = $peminjamService;
     }
 
-    /**
-     * Daftar alat tersedia
-     * GET /api/peminjam/tools
-     */
+    // ==================== ALAT ====================
+
     public function tools()
     {
         $tools = $this->peminjamService->getAllAvailableTools();
@@ -33,10 +33,6 @@ class PeminjamController extends Controller
         ], 200);
     }
 
-    /**
-     * Detail alat
-     * GET /api/peminjam/tools/{id}
-     */
     public function toolDetail($id)
     {
         $tool = $this->peminjamService->getToolDetail($id);
@@ -55,23 +51,36 @@ class PeminjamController extends Controller
         ], 200);
     }
 
-    /**
-     * Ajukan peminjaman
-     * POST /api/peminjam/submit
-     */
-    public function submitLoan(PeminjamRequest $request)
+    // ==================== CART ====================
+
+    public function getCart()
+    {
+        $cart = $this->peminjamService->getCart();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Keranjang belanja',
+            'data' => [
+                'items' => CartResource::collection($cart['items']),
+                'total' => $cart['total'],
+                'total_formatted' => $cart['total_formatted'],
+            ]
+        ], 200);
+    }
+
+    public function addToCart(CartRequest $request)
     {
         try {
-            $loan = $this->peminjamService->submitLoanRequest(
-                Auth::id(),  // <-- GANTI auth()->id() dengan Auth::id()
+            $cart = $this->peminjamService->addToCart(
                 $request->tool_id,
-                $request->tanggal_kembali
+                $request->quantity,
+                $request->durasi
             );
 
             return response()->json([
                 'success' => true,
-                'message' => 'Pengajuan peminjaman berhasil, menunggu persetujuan petugas',
-                'data' => new LoanResource($loan)
+                'message' => 'Item berhasil ditambahkan ke keranjang',
+                'data' => new CartResource($cart)
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -81,32 +90,91 @@ class PeminjamController extends Controller
         }
     }
 
-    /**
-     * Riwayat peminjaman
-     * GET /api/peminjam/history
-     */
+    public function updateCartItem(CartRequest $request, $id)
+    {
+        try {
+            $cart = $this->peminjamService->updateCartItem($id, $request->quantity);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Keranjang berhasil diperbarui',
+                'data' => new CartResource($cart)
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    public function removeFromCart($id)
+    {
+        try {
+            $this->peminjamService->removeFromCart($id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Item berhasil dihapus dari keranjang'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    public function clearCart()
+    {
+        $this->peminjamService->clearCart();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Keranjang berhasil dikosongkan'
+        ], 200);
+    }
+
+    // ==================== CHECKOUT ====================
+
+    public function checkout(CheckoutRequest $request)
+    {
+        try {
+            $result = $this->peminjamService->checkout($request->validated());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Checkout berhasil! Menunggu konfirmasi petugas.',
+                'data' => new CheckoutResource($result)
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    // ==================== RIWAYAT ====================
+
     public function history()
     {
-        $loans = $this->peminjamService->getUserLoanHistory(Auth::id());  // <-- GANTI
-        $stats = $this->peminjamService->getUserLoanStats(Auth::id());    // <-- GANTI
+        $loans = $this->peminjamService->getUserLoanHistory(Auth::id());
+        $stats = $this->peminjamService->getUserLoanStats(Auth::id());
 
         return response()->json([
             'success' => true,
             'message' => 'Riwayat peminjaman',
             'data' => [
                 'stats' => $stats,
-                'loans' => LoanResource::collection($loans)
+                'loans' => \App\Http\Resources\Admin\LoanResource::collection($loans)
             ]
         ], 200);
     }
 
-    /**
-     * Detail peminjaman user
-     * GET /api/peminjam/loans/{id}
-     */
     public function loanDetail($id)
     {
-        $loan = $this->peminjamService->getLoanById($id, Auth::id());  // <-- GANTI
+        $loan = $this->peminjamService->getLoanById($id, Auth::id());
 
         if (!$loan) {
             return response()->json([
@@ -118,19 +186,18 @@ class PeminjamController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Detail peminjaman',
-            'data' => new LoanResource($loan)
+            'data' => new \App\Http\Resources\Admin\LoanResource($loan)
         ], 200);
     }
 
-    /**
-     * Dashboard Peminjam
-     * GET /api/peminjam/dashboard
-     */
+    // ==================== DASHBOARD ====================
+
     public function dashboard()
     {
         $tools = $this->peminjamService->getAllAvailableTools();
-        $loans = $this->peminjamService->getUserLoanHistory(Auth::id());  // <-- GANTI
-        $stats = $this->peminjamService->getUserLoanStats(Auth::id());    // <-- GANTI
+        $loans = $this->peminjamService->getUserLoanHistory(Auth::id());
+        $stats = $this->peminjamService->getUserLoanStats(Auth::id());
+        $cart = $this->peminjamService->getCart();
 
         return response()->json([
             'success' => true,
@@ -138,8 +205,13 @@ class PeminjamController extends Controller
             'data' => [
                 'stats' => $stats,
                 'available_tools' => ToolResource::collection($tools->take(5)),
-                'recent_loans' => LoanResource::collection($loans->take(5)),
+                'recent_loans' => \App\Http\Resources\Admin\LoanResource::collection($loans->take(5)),
                 'total_available_tools' => $tools->count(),
+                'cart_summary' => [
+                    'total_items' => count($cart['items']),
+                    'total' => $cart['total'],
+                    'total_formatted' => $cart['total_formatted'],
+                ]
             ]
         ], 200);
     }

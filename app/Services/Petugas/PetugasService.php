@@ -29,37 +29,37 @@ class PetugasService
     }
 
     public function approveLoan(int $loanId): Loan
-    {
-        $loan = Loan::findOrFail($loanId);
+{
+    $loan = Loan::findOrFail($loanId);
 
-        if ($loan->status !== 'pending') {
-            throw new \Exception('Peminjaman sudah diproses sebelumnya.');
-        }
-
-        $tool = Tool::find($loan->tool_id);
-        if ($tool && $tool->stok < 1) {
-            throw new \Exception('Stok alat habis, tidak bisa menyetujui peminjaman.');
-        }
-
-        $loan->update([
-            'status' => 'disetujui',
-            'petugas_id' => Auth::id(),
-        ]);
-
-        // Kurangi stok alat
-        if ($tool) {
-            $tool->decrement('stok');
-        }
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'Setujui Peminjaman',
-            'description' => "Petugas menyetujui peminjaman alat: {$loan->tool->nama_alat} oleh {$loan->user->name}"
-        ]);
-
-        return $loan->load(['user', 'tool']);
+    if ($loan->status !== 'pending') {
+        throw new \Exception('Peminjaman sudah diproses sebelumnya.');
     }
 
+    $tool = Tool::find($loan->tool_id);
+    $stokDipinjam = $loan->stok ?? 1;
+
+    if ($tool && $tool->stok < $stokDipinjam) {
+        throw new \Exception("Stok alat tidak mencukupi. Stok tersedia: {$tool->stok}, Dibutuhkan: {$stokDipinjam}");
+    }
+
+    $loan->update([
+        'status' => 'disetujui',
+        'petugas_id' => Auth::id(),
+    ]);
+
+    if ($tool) {
+        $tool->decrement('stok', $stokDipinjam);
+    }
+
+    ActivityLog::create([
+        'user_id' => Auth::id(),
+        'action' => 'Setujui Peminjaman',
+        'description' => "Petugas menyetujui peminjaman alat: {$loan->tool->nama_alat} oleh {$loan->user->name}, Jumlah: {$stokDipinjam}"
+    ]);
+
+    return $loan->load(['user', 'tool']);
+}
     public function rejectLoan(int $loanId): Loan
     {
         $loan = Loan::findOrFail($loanId);
@@ -83,32 +83,31 @@ class PetugasService
     }
 
     public function processReturn(int $loanId): Loan
-    {
-        $loan = Loan::findOrFail($loanId);
+{
+    $loan = Loan::findOrFail($loanId);
 
-        if ($loan->status !== 'disetujui') {
-            throw new \Exception('Data tidak valid atau sudah dikembalikan.');
-        }
-
-        $loan->update([
-            'status' => 'kembali',
-            'tanggal_kembali_aktual' => now()->toDateString(),
-            'petugas_id' => Auth::id(),
-        ]);
-
-        // Kembalikan stok alat
-        if ($loan->tool) {
-            $loan->tool->increment('stok');
-        }
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'Proses Pengembalian',
-            'description' => "Petugas memproses pengembalian alat: {$loan->tool->nama_alat} oleh {$loan->user->name}"
-        ]);
-
-        return $loan->load(['user', 'tool']);
+    if ($loan->status !== 'disetujui') {
+        throw new \Exception('Data tidak valid atau sudah dikembalikan.');
     }
+
+    $loan->update([
+        'status' => 'kembali',
+        'petugas_id' => Auth::id(),
+    ]);
+
+    // Kembalikan stok alat
+    if ($loan->tool) {
+        $loan->tool->increment('stok', $loan->stok);
+    }
+
+    ActivityLog::create([
+        'user_id' => Auth::id(),
+        'action' => 'Proses Pengembalian',
+        'description' => "Petugas memproses pengembalian alat: {$loan->tool->nama_alat} oleh {$loan->user->name}"
+    ]);
+
+    return $loan->load(['user', 'tool']);
+}
 
     public function getAllLoansForReport(int $perPage = 10): LengthAwarePaginator
     {

@@ -32,7 +32,7 @@ class ToolService
             ActivityLog::create([
                 'user_id' => Auth::id(),
                 'action' => 'Tambah Alat',
-                'description' => "Menambahkan alat baru: {$tool->nama_alat} (Stok: {$tool->stok})"
+                'description' => "Menambahkan alat baru: {$tool->nama_alat} (Stok: {$tool->stok}, Harga 6jam: {$tool->harga_6jam}, 12jam: {$tool->harga_12jam}, 24jam: {$tool->harga_24jam})"
             ]);
         }
 
@@ -40,29 +40,29 @@ class ToolService
     }
 
     public function updateTool(Tool $tool, array $data, $gambarFile = null): Tool
-{
-    // Handle upload gambar baru
-    if ($gambarFile) {
-        // Hapus gambar lama jika ada
-        if ($tool->gambar && Storage::disk('public')->exists($tool->gambar)) {
-            Storage::disk('public')->delete($tool->gambar);
+    {
+        // Handle upload gambar baru
+        if ($gambarFile) {
+            // Hapus gambar lama jika ada
+            if ($tool->gambar && Storage::disk('public')->exists($tool->gambar)) {
+                Storage::disk('public')->delete($tool->gambar);
+            }
+            $data['gambar'] = $gambarFile->store('tools', 'public');
         }
-        $data['gambar'] = $gambarFile->store('tools', 'public');
+
+        // Update model dengan data baru
+        $tool->update($data);
+
+        if (Auth::check()) {
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'Update Alat',
+                'description' => "Memperbarui data alat: {$tool->nama_alat} (Stok: {$tool->stok}, Harga 6jam: {$tool->harga_6jam}, 12jam: {$tool->harga_12jam}, 24jam: {$tool->harga_24jam})"
+            ]);
+        }
+
+        return $tool->fresh();
     }
-
-    // Update model dengan data baru
-    $tool->update($data);  // ← LANGSUNG PAKAI UPDATE()
-
-    if (Auth::check()) {
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'Update Alat',
-            'description' => "Memperbarui data alat: {$tool->nama_alat}"
-        ]);
-    }
-
-    return $tool->fresh();
-}
 
     public function deleteTool(Tool $tool): bool
     {
@@ -98,11 +98,13 @@ class ToolService
 
     public function getAvailableTools()
     {
-        return Tool::with('category')->where('stok', '>', 0)->get();
+        return Tool::with('category')
+            ->where('stok', '>', 0)
+            ->get(['id', 'nama_alat', 'deskripsi', 'stok', 'harga_6jam', 'harga_12jam', 'harga_24jam', 'gambar', 'category_id']);
     }
 
     public function getAllToolsForSelect(): \Illuminate\Database\Eloquent\Collection
     {
-        return Tool::all(['id', 'nama_alat', 'stok']);
+        return Tool::all(['id', 'nama_alat', 'stok', 'harga_6jam', 'harga_12jam', 'harga_24jam']);
     }
 }

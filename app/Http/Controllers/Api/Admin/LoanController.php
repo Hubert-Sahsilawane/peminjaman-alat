@@ -16,9 +16,6 @@ class LoanController extends Controller
         $this->loanService = $loanService;
     }
 
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
         $loans = $this->loanService->getAllLoans(10);
@@ -38,9 +35,6 @@ class LoanController extends Controller
         ], 200);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(LoanRequest $request)
     {
         try {
@@ -59,9 +53,6 @@ class LoanController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
         $loan = $this->loanService->getLoanById($id);
@@ -80,9 +71,6 @@ class LoanController extends Controller
         ], 200);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(LoanRequest $request, $id)
     {
         $loan = $this->loanService->getLoanById($id);
@@ -110,9 +98,6 @@ class LoanController extends Controller
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id)
     {
         $loan = $this->loanService->getLoanById($id);
@@ -132,32 +117,26 @@ class LoanController extends Controller
         ], 200);
     }
 
-    /**
-     * Get loans by status.
-     */
     public function byStatus($status)
-    {
-        $validStatus = ['pending', 'disetujui', 'ditolak', 'kembali'];
+{
+    $validStatus = ['pending', 'disetujui', 'ditolak', 'kembali', 'telat'];  // ✅ Tambah 'telat'
 
-        if (!in_array($status, $validStatus)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Status tidak valid'
-            ], 400);
-        }
-
-        $loans = $this->loanService->getLoansByStatus($status);
-
+    if (!in_array($status, $validStatus)) {
         return response()->json([
-            'success' => true,
-            'message' => "Daftar peminjaman dengan status: {$status}",
-            'data' => LoanResource::collection($loans)
-        ], 200);
+            'success' => false,
+            'message' => 'Status tidak valid'
+        ], 400);
     }
 
-    /**
-     * Get data for select dropdowns.
-     */
+    $loans = $this->loanService->getLoansByStatus($status);
+
+    return response()->json([
+        'success' => true,
+        'message' => "Daftar peminjaman dengan status: {$status}",
+        'data' => LoanResource::collection($loans)
+    ], 200);
+}
+
     public function selectData()
     {
         return response()->json([
@@ -170,9 +149,6 @@ class LoanController extends Controller
         ], 200);
     }
 
-    /**
-     * Get dashboard statistics.
-     */
     public function stats()
     {
         $stats = $this->loanService->getDashboardStats();
