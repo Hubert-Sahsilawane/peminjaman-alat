@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ToolRequest;
 use App\Http\Resources\Admin\ToolResource;
 use App\Services\Admin\ToolService;
+use Illuminate\Http\Request;
 
 class ToolController extends Controller
 {
@@ -16,9 +17,10 @@ class ToolController extends Controller
         $this->toolService = $toolService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $tools = $this->toolService->getAllTools(10);
+        $categoryId = $request->query('category_id');
+        $tools = $this->toolService->getAllTools(10, $categoryId); // 10 = pagination limit
 
         return response()->json([
             'success' => true,

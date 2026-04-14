@@ -16,7 +16,7 @@ class PeminjamService
     public function getAllAvailableTools(): \Illuminate\Database\Eloquent\Collection
     {
         return Tool::with('category')
-            ->where('stok', '>', 0)
+            // Kita tampilkan semua alat, termasuk yang stoknya habis agar user bisa lihat katalog penuh
             ->latest()
             ->get();
     }
@@ -150,86 +150,88 @@ class PeminjamService
     }
 
     public function checkout(array $data): array
-{
-    $carts = Cart::with('tool')
-        ->where('user_id', Auth::id())
-        ->get();
-
-    if ($carts->isEmpty()) {
-        throw new \Exception('Keranjang belanja kosong');
-    }
-
-    DB::beginTransaction();
-
-    try {
-        // Generate 1 invoice untuk semua item
-        $invoiceNumber = Loan::generateInvoiceNumber();
-        $loans = [];
-        $grandTotal = 0;
-
-        foreach ($carts as $cart) {
-            $tool = $cart->tool;
-
-            // Cek stok
-            if ($tool->stok < $cart->quantity) {
-                throw new \Exception("Stok {$tool->nama_alat} tidak mencukupi. Tersedia: {$tool->stok}, Dibutuhkan: {$cart->quantity}");
-            }
-
-            $subtotal = $cart->subtotal;
-            $grandTotal += $subtotal;
-
-            $loan = Loan::create([
-                'invoice_number' => $invoiceNumber,
-                'user_id' => Auth::id(),
-                'tool_id' => $cart->tool_id,
-                'stok' => $cart->quantity,
-                'durasi' => $cart->durasi,
-                'harga_satuan' => $cart->harga_satuan,
-                'subtotal' => $subtotal,
-                'total_bayar' => $subtotal,
-                'tanggal_pinjam' => $data['tanggal_pinjam'],
-                'tanggal_kembali' => $data['tanggal_kembali'],
-                'status' => 'pending',
-                'status_pembayaran' => 'pending',
-            ]);
-
-            $loans[] = $loan;
-            $tool->decrement('stok', $cart->quantity);
-        }
-
-        // Update total_bayar untuk semua loan dengan invoice yang sama
-        Loan::where('invoice_number', $invoiceNumber)
-            ->update(['total_bayar' => $grandTotal]);
-
-        // Kosongkan keranjang
-        Cart::where('user_id', Auth::id())->delete();
-
-        DB::commit();
-
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'Checkout',
-            'description' => "User melakukan checkout dengan invoice: {$invoiceNumber}, Total: Rp " . number_format($grandTotal, 0, ',', '.')
-        ]);
-
-        // Ambil semua loan dengan invoice yang sama
-        $allLoans = Loan::with(['tool'])
-            ->where('invoice_number', $invoiceNumber)
+    {
+        $carts = Cart::with('tool')
+            ->where('user_id', Auth::id())
             ->get();
 
-        return [
-            'invoice_number' => $invoiceNumber,
-            'items' => $allLoans,
-            'grand_total' => $grandTotal,
-            'tanggal_pinjam' => $data['tanggal_pinjam'],
-            'tanggal_kembali' => $data['tanggal_kembali'],
-        ];
+        if ($carts->isEmpty()) {
+            throw new \Exception('Keranjang belanja kosong');
+        }
 
-    } catch (\Exception $e) {
-        DB::rollBack();
-        throw $e;
+        DB::beginTransaction();
+
+        try {
+            // Generate 1 invoice untuk semua item
+            $invoiceNumber = Loan::generateInvoiceNumber();
+            $loans = [];
+            $grandTotal = 0;
+
+            foreach ($carts as $cart) {
+                $tool = $cart->tool;
+
+                // Tetap cek stok di sini untuk memastikan saat checkout alat belum habis disewa orang lain
+                if ($tool->stok < $cart->quantity) {
+                    throw new \Exception("Stok {$tool->nama_alat} tidak mencukupi. Tersedia: {$tool->stok}, Dibutuhkan: {$cart->quantity}");
+                }
+
+                $subtotal = $cart->subtotal;
+                $grandTotal += $subtotal;
+
+                $loan = Loan::create([
+                    'invoice_number' => $invoiceNumber,
+                    'user_id' => Auth::id(),
+                    'tool_id' => $cart->tool_id,
+                    'stok' => $cart->quantity,
+                    'durasi' => $cart->durasi,
+                    'harga_satuan' => $cart->harga_satuan,
+                    'subtotal' => $subtotal,
+                    'total_bayar' => $subtotal,
+                    'tanggal_pinjam' => $data['tanggal_pinjam'],
+                    'tanggal_kembali' => $data['tanggal_kembali'],
+                    'status' => 'pending',
+                    'status_pembayaran' => 'pending',
+                ]);
+
+                $loans[] = $loan;
+
+                // ✅ BARIS PENGURANGAN STOK DI SINI DIHAPUS.
+                // Stok hanya akan berkurang saat petugas klik "Approve" (disetujui).
+            }
+
+            // Update total_bayar untuk semua loan dengan invoice yang sama
+            Loan::where('invoice_number', $invoiceNumber)
+                ->update(['total_bayar' => $grandTotal]);
+
+            // Kosongkan keranjang
+            Cart::where('user_id', Auth::id())->delete();
+
+            DB::commit();
+
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'Checkout',
+                'description' => "User melakukan checkout dengan invoice: {$invoiceNumber}, Total: Rp " . number_format($grandTotal, 0, ',', '.')
+            ]);
+
+            // Ambil semua loan dengan invoice yang sama
+            $allLoans = Loan::with(['tool'])
+                ->where('invoice_number', $invoiceNumber)
+                ->get();
+
+            return [
+                'invoice_number' => $invoiceNumber,
+                'items' => $allLoans,
+                'grand_total' => $grandTotal,
+                'tanggal_pinjam' => $data['tanggal_pinjam'],
+                'tanggal_kembali' => $data['tanggal_kembali'],
+            ];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
-}
 
     // ==================== RIWAYAT ====================
 
@@ -258,6 +260,99 @@ class PeminjamService
             'late_loans' => Loan::where('user_id', $userId)->where('status', 'telat')->count(),
             'completed_loans' => Loan::where('user_id', $userId)->where('status', 'kembali')->count(),
             'rejected_loans' => Loan::where('user_id', $userId)->where('status', 'ditolak')->count(),
+        ];
+    }
+
+    // ==================== TRANSAKSI / PEMBAYARAN ====================
+
+    public function getInvoiceDetail(string $invoiceNumber, int $userId)
+    {
+        $loans = Loan::with('tool')
+            ->where('invoice_number', $invoiceNumber)
+            ->where('user_id', $userId)
+            ->get();
+
+        if ($loans->isEmpty()) {
+            throw new \Exception('Invoice tidak ditemukan.');
+        }
+
+        $grandTotal = 0;
+        $statusPembayaran = 'lunas';
+
+        foreach ($loans as $loan) {
+            // ✅ Jumlahkan subtotal sewa + semua jenis denda
+            $itemTotal = $loan->subtotal + $loan->denda + $loan->denda_rusak + $loan->denda_hilang;
+            $grandTotal += $itemTotal;
+
+            if ($loan->status_pembayaran === 'pending') {
+                $statusPembayaran = 'pending';
+            }
+        }
+
+        return [
+            'invoice_number' => $invoiceNumber,
+            'items' => $loans,
+            'grand_total' => $grandTotal, // ✅ Sekarang Grand Total 100% Akurat!
+            'status_pembayaran' => $statusPembayaran,
+            'tanggal_pinjam' => $loans->first()->tanggal_pinjam,
+            'tanggal_kembali' => $loans->first()->tanggal_kembali,
+        ];
+    }
+
+    public function payInvoice(string $invoiceNumber, int $userId): bool
+    {
+        $loans = Loan::where('invoice_number', $invoiceNumber)
+            ->where('user_id', $userId)
+            ->get();
+
+        if ($loans->isEmpty()) {
+            throw new \Exception('Invoice tidak ditemukan.');
+        }
+
+        // Update semua item dalam invoice tersebut menjadi lunas
+        Loan::where('invoice_number', $invoiceNumber)
+            ->where('user_id', $userId)
+            ->update(['status_pembayaran' => 'lunas']);
+
+        ActivityLog::create([
+            'user_id' => $userId,
+            'action' => 'Pembayaran',
+            'description' => "User melakukan pembayaran untuk invoice: {$invoiceNumber}"
+        ]);
+
+        return true;
+    }
+
+    // app/Services/Peminjam/PeminjamService.php
+
+public function requestReturn(int $loanId, int $userId, array $data, $file = null)
+    {
+        $loan = Loan::where('id', $loanId)->where('user_id', $userId)->firstOrFail();
+
+        if ($loan->status !== 'disetujui' && $loan->status !== 'telat') {
+            throw new \Exception('Status barang tidak valid untuk dikembalikan.');
+        }
+
+        // Proses Upload Gambar
+        $pathGambar = null;
+        if ($file) {
+            $pathGambar = $file->store('returns', 'public');
+        }
+
+        // ✅ PERBAIKAN: Hapus update status ke 'kembali'.
+        // Biarkan status tetap 'disetujui', kita hanya menyimpan laporan kondisinya saja.
+        $loan->update([
+            'kondisi_kembali' => $data['kondisi_kembali'],
+            'catatan_peminjam' => $data['catatan_peminjam'],
+            'bukti_kembali' => $pathGambar
+        ]);
+
+        $loan->refresh();
+
+        return [
+            'has_denda' => $loan->denda > 0,
+            'invoice_number' => $loan->invoice_number,
+            'denda' => $loan->denda
         ];
     }
 }

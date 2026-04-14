@@ -76,46 +76,50 @@ class PetugasController extends Controller
     /**
      * Proses pengembalian alat
      */
-    public function processReturn($id)
+    public function processReturn(\Illuminate\Http\Request $request, $id)
     {
         try {
-            $loan = $this->petugasService->processReturn($id);
+            $validated = $request->validate([
+                'denda_rusak' => 'nullable|numeric|min:0',
+                'denda_hilang' => 'nullable|numeric|min:0',
+                'keterangan_kondisi' => 'nullable|string',
+                'bukti_penerimaan' => 'nullable|file|max:2048' // ✅ Terima file gambar
+            ]);
+
+            // Kirim request file ke Service
+            $loan = $this->petugasService->processReturn($id, $validated, $request->file('bukti_penerimaan'));
 
             return response()->json([
                 'success' => true,
-                'message' => 'Alat berhasil dikembalikan',
-                'data' => new LoanResource($loan)
+                'message' => 'Alat berhasil dikembalikan dan denda (jika ada) telah diakumulasi.',
+                'data' => new \App\Http\Resources\Admin\LoanResource($loan)
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        }
+    }
+    /**
+     * Laporan peminjaman (Digunakan di halaman Report)
+     */
+    public function report(Request $request)
+    {
+        try {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+
+            $data = $this->petugasService->getFilteredReport($startDate, $endDate);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data laporan berhasil diambil',
+                'data' => $data
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
-            ], 400);
+            ], 500);
         }
-    }
-
-    /**
-     * Laporan peminjaman
-     */
-    public function report(Request $request)
-    {
-        $loans = $this->petugasService->getAllLoansForReport(10);
-        $stats = $this->petugasService->getReportStats();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Laporan peminjaman',
-            'data' => [
-                'stats' => $stats,
-                'loans' => LoanResource::collection($loans),
-                'pagination' => [
-                    'current_page' => $loans->currentPage(),
-                    'last_page' => $loans->lastPage(),
-                    'per_page' => $loans->perPage(),
-                    'total' => $loans->total(),
-                ]
-            ]
-        ], 200);
     }
 
     /**

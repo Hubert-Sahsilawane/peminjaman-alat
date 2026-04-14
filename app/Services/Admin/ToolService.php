@@ -6,13 +6,19 @@ use App\Models\Tool;
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Pagination\LengthAwarePaginator;
 
 class ToolService
 {
-    public function getAllTools(int $perPage = 10): LengthAwarePaginator
+    public function getAllTools(int $perPage = 10, ?int $categoryId = null)
     {
-        return Tool::with('category')->latest()->paginate($perPage);
+        $query = Tool::with('category')->latest();
+
+        // Jika ada filter kategori
+        if ($categoryId) {
+            $query->where('category_id', $categoryId);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function getToolById(int $id): ?Tool

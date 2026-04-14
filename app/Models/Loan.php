@@ -11,7 +11,6 @@ class Loan extends Model
     protected $casts = [
         'tanggal_pinjam' => 'date',
         'tanggal_kembali' => 'date',
-        'tanggal_kembali_aktual' => 'date',
         'stok' => 'integer',
         'harga_satuan' => 'integer',
         'subtotal' => 'integer',

@@ -83,6 +83,22 @@ class LoanService
     public function updateLoan(Loan $loan, array $data): Loan
     {
         $oldStatus = $loan->status;
+        $newStatus = $data['status'] ?? $oldStatus;
+
+        // ✅ VALIDASI STATUS TERKUNCI (Sesuai Request)
+        if ($oldStatus !== $newStatus) {
+            if ($oldStatus === 'ditolak') {
+                throw new \Exception("Gagal: Peminjaman yang sudah 'Ditolak' tidak dapat diganti ke status lain.");
+            }
+            if ($oldStatus === 'kembali') {
+                throw new \Exception("Gagal: Peminjaman yang sudah 'Kembali' tidak dapat diganti ke status lain.");
+            }
+            if ($oldStatus === 'disetujui' && !in_array($newStatus, ['kembali', 'telat'])) {
+                // Disetujui hanya boleh berubah secara sistem menjadi kembali/telat, tidak boleh manual mundur ke pending/ditolak
+                throw new \Exception("Gagal: Peminjaman yang sudah 'Disetujui' tidak dapat diganti secara manual.");
+            }
+        }
+
         $tool = $loan->tool;
         $stokDipinjam = $data['stok'] ?? $loan->stok;  // ← Ganti quantity ke stok
 
@@ -95,18 +111,18 @@ class LoanService
         }
 
         // Logika perubahan stok berdasarkan status
-        if ($oldStatus === 'pending' && isset($data['status']) && $data['status'] === 'disetujui') {
+        if ($oldStatus === 'pending' && $newStatus === 'disetujui') {
             // Pending → Disetujui: kurangi stok
             if ($tool && $tool->stok < $stokDipinjam) {
                 throw new \Exception("Stok alat tidak mencukupi. Stok tersedia: {$tool->stok}, Dibutuhkan: {$stokDipinjam}");
             }
             $tool?->decrement('stok', $stokDipinjam);
         }
-        elseif (in_array($oldStatus, ['disetujui', 'telat']) && isset($data['status']) && $data['status'] === 'kembali') {
+        elseif (in_array($oldStatus, ['disetujui', 'telat']) && $newStatus === 'kembali') {
             // Disetujui/Telat → Kembali: tambah stok
             $tool?->increment('stok', $loan->stok);
         }
-        elseif ($oldStatus === 'disetujui' && isset($data['status']) && in_array($data['status'], ['pending', 'ditolak'])) {
+        elseif ($oldStatus === 'disetujui' && in_array($newStatus, ['pending', 'ditolak'])) {
             // Disetujui → Pending/Ditolak: kembalikan stok
             $tool?->increment('stok', $loan->stok);
         }

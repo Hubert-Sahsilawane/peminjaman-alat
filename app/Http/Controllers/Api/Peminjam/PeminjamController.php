@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Peminjam;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request; // ✅ Pastikan Request di-import
 use App\Http\Requests\Peminjam\CartRequest;
 use App\Http\Requests\Peminjam\CheckoutRequest;
 use App\Http\Resources\Admin\ToolResource;
@@ -10,6 +11,8 @@ use App\Http\Resources\Peminjam\CartResource;
 use App\Http\Resources\Peminjam\CheckoutResource;
 use App\Services\Peminjam\PeminjamService;
 use Illuminate\Support\Facades\Auth;
+use App\Mail\PaymentSuccessfulMail;
+use Illuminate\Support\Facades\Mail;
 
 class PeminjamController extends Controller
 {
@@ -214,5 +217,115 @@ class PeminjamController extends Controller
                 ]
             ]
         ], 200);
+    }
+
+    // ==================== TRANSAKSI / PEMBAYARAN ====================
+
+    public function invoice($invoice_number)
+    {
+        try {
+            $invoice = $this->peminjamService->getInvoiceDetail($invoice_number, Auth::id());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Detail Invoice',
+                'data' => $invoice
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    // ✅ METHOD PAY DIPERBARUI DENGAN EMAIL
+    // ✅ METHOD PAY DIPERBARUI DENGAN EMAIL & VARIABEL LENGKAP
+    public function pay($invoice_number, Request $request)
+    {
+        try {
+            // 1. Eksekusi service untuk ubah status di database
+            $this->peminjamService->payInvoice($invoice_number, Auth::id());
+
+            // 2. Ambil metode pembayaran yang dipilih
+            $method = $request->input('method', 'Transfer / E-Wallet / QRIS');
+
+            // 3. AMBIL DATA LENGKAP DARI INVOICE INI
+            $loans = \App\Models\Loan::with(['user', 'tool'])
+                        ->where('invoice_number', $invoice_number)
+                        ->get();
+
+            // Ambil detail data dari item pertama
+            $firstLoan = $loans->first();
+            $userId = $firstLoan->user_id;
+            $userName = $firstLoan->user->name ?? 'Peminjam Adora Cam';
+            $tanggalPinjam = $firstLoan->tanggal_pinjam;
+            $tanggalSelesai = $firstLoan->tanggal_kembali;
+            $statusPembayaran = 'Lunas'; // Karena method ini dipanggil setelah payInvoice berhasil
+
+            // Ambil semua nama alat, gabungkan dengan koma jika lebih dari 1
+            $itemName = $loans->pluck('tool.nama_alat')->implode(', ');
+
+            // 4. Ambil email para Admin dan Petugas
+            $adminAndPetugasEmails = \App\Models\User::whereIn('role', ['admin', 'petugas'])->pluck('email');
+
+            // 5. Kirim Notifikasi Email dengan Data Lengkap
+            if ($adminAndPetugasEmails->isNotEmpty()) {
+                Mail::to($adminAndPetugasEmails)->send(new PaymentSuccessfulMail(
+                    $userId,
+                    $userName,
+                    $invoice_number,
+                    $itemName,
+                    $tanggalPinjam,
+                    $tanggalSelesai,
+                    $statusPembayaran,
+                    $method
+                ));
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pembayaran berhasil! Notifikasi telah dikirim ke admin.'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+   public function returnAlat(Request $request, $id)
+    {
+        try {
+            // Validasi Input dari Modal Peminjam
+            $validated = $request->validate([
+                'kondisi_kembali' => 'required|string',
+                'catatan_peminjam' => 'nullable|string',
+                // ✅ UPDATE: Diubah menjadi 'file' agar lebih longgar dan tidak gampang error
+                'gambar' => 'nullable|file|max:2048'
+            ]);
+
+            // Teruskan ke Service
+            $result = $this->peminjamService->requestReturn($id, Auth::id(), $validated, $request->file('gambar'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Laporan pengembalian berhasil dikirim.',
+                'data' => $result
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // ✅ Menangkap error validasi agar pesannya lebih jelas di frontend
+            return response()->json([
+                'success' => false,
+                'message' => $e->validator->errors()->first()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
     }
 }

@@ -7,7 +7,7 @@ use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Spatie\Permission\Models\Role;
+// Hapus import Spatie Role jika tidak digunakan
 use Illuminate\Support\Facades\Log;
 
 class UserService
@@ -35,15 +35,16 @@ class UserService
     {
         try {
             $data['password'] = Hash::make($data['password']);
+
+            // ✅ Simpan langsung ke kolom role (Manual)
             $user = User::create($data);
-            $user->assignRole($data['role']);
 
             $userId = Auth::id();
             if ($userId) {
                 ActivityLog::create([
                     'user_id' => $userId,
                     'action' => 'Tambah User',
-                    'description' => "Menambahkan user baru: {$user->name} ({$data['role']})"
+                    'description' => "Menambahkan user baru: {$user->name} ({$user->role})"
                 ]);
             }
 
@@ -63,12 +64,8 @@ class UserService
                 unset($data['password']);
             }
 
-            $oldRole = $user->getRoleNames()->first();
+            // ✅ Update data termasuk kolom role secara manual
             $user->update($data);
-
-            if (isset($data['role']) && $data['role'] !== $oldRole) {
-                $user->syncRoles([$data['role']]);
-            }
 
             $userId = Auth::id();
             if ($userId) {
@@ -86,29 +83,33 @@ class UserService
         }
     }
 
-    public function deleteUser(User $user, int $currentUserId): bool
+    public function deleteUser($user, $currentUserId)
     {
-        if ($user->id == $currentUserId) {
-            return false;
+        // 1. Validasi tidak boleh hapus diri sendiri
+        if ((int)$user->id === (int)$currentUserId) {
+            return 'self';
         }
 
-        $userName = $user->name;
-        $user->delete();
-
-        $userId = Auth::id();
-        if ($userId) {
-            ActivityLog::create([
-                'user_id' => $userId,
-                'action' => 'Hapus User',
-                'description' => "Menghapus user: {$userName}"
-            ]);
+        // 2. Validasi jika user punya pesanan/transaksi
+        // (Kita cek apakah ada data user_id ini di tabel loans)
+        $hasLoans = \App\Models\Loan::where('user_id', $user->id)->exists();
+        if ($hasLoans) {
+            return 'has_loans';
         }
 
-        return true;
+        // 3. Jika aman, hapus user
+        try {
+            $user->delete();
+            return 'success';
+        } catch (\Exception $e) {
+            Log::error('Delete user error: ' . $e->getMessage());
+            return 'error';
+        }
     }
-
+    
     public function getRoles(): array
     {
-        return Role::pluck('name')->toArray();
+        // ✅ Karena manual, kita bisa mengembalikan array statis role yang tersedia
+        return ['admin', 'petugas', 'peminjam'];
     }
 }

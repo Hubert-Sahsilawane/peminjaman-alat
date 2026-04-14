@@ -129,16 +129,32 @@ class UserController extends Controller
 
         $result = $this->userService->deleteUser($user, Auth::id());
 
-        if (!$result) {
+        // Menangkap berbagai kemungkinan respon dari Service
+        if ($result === 'self') {
             return response()->json([
                 'success' => false,
-                'message' => 'Anda tidak dapat menghapus akun sendiri'
+                'message' => 'Anda tidak dapat menghapus akun sendiri.'
             ], 400);
         }
 
+        if ($result === 'has_loans') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Maaf akun ini tidak dapat dihapus karena sudah memiliki pesanan.'
+            ], 400);
+        }
+
+        if ($result === 'error') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem saat menghapus user.'
+            ], 500);
+        }
+
+        // Jika success
         return response()->json([
             'success' => true,
-            'message' => 'User berhasil dihapus'
+            'message' => 'User berhasil dihapus.'
         ], 200);
     }
 
@@ -154,10 +170,15 @@ class UserController extends Controller
         ], 200);
     }
 
-    private function checkRole($role)
-    {
-        if (Auth::user()->getRoleNames()->first() !== $role) {
-            abort(403, 'Akses ditolak');
-        }
+   private function checkRole($role)
+{
+    // Mengambil user yang sedang login
+    $user = Auth::user();
+
+    // Cek apakah user ada dan apakah kolom role-nya sesuai
+    if (!$user || $user->role !== $role) {
+        // Jika tidak sesuai, hentikan proses dengan error 403 (Forbidden)
+        abort(403, 'Akses ditolak. Anda bukan ' . $role);
     }
+}
 }

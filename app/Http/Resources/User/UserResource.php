@@ -13,7 +13,8 @@ class UserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
-            'role' => $this->getRoleNames()->first(),
+            // 🔴 PERUBAHAN UTAMA: Langsung ambil dari kolom database
+            'role' => $this->role,
             'role_label' => $this->getRoleLabel(),
             'created_at' => $this->created_at?->toDateTimeString(),
             'updated_at' => $this->updated_at?->toDateTimeString(),
@@ -22,12 +23,13 @@ class UserResource extends JsonResource
 
     private function getRoleLabel(): string
     {
-        $role = $this->getRoleNames()->first();
+        $role = strtolower($this->role ?? '');
+
         return match ($role) {
             'admin' => 'Administrator',
             'petugas' => 'Petugas Lab',
             'peminjam' => 'Peminjam',
-            default => 'Unknown',
+            default => 'Peminjam', // Jika di database benar-benar kosong (NULL)
         };
     }
 }
